@@ -486,50 +486,49 @@ end
 --- Drags gui (so long as mouse is held down)
 --- @param input InputObject
 function onBarInput(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local lastPos = UserInputService:GetMouseLocation()
-        local mainPos = Background.AbsolutePosition
-        local offset = mainPos - lastPos
-        local currentPos = offset + lastPos
-        if not connections["drag"] then
-            connections["drag"] = RunService.RenderStepped:Connect(function()
-                local newPos = UserInputService:GetMouseLocation()
-                if newPos ~= lastPos then
-                    local currentX = (offset + newPos).X
-                    local currentY = (offset + newPos).Y
-                    local viewportSize = workspace.CurrentCamera.ViewportSize
-                    if (currentX < 0 and currentX < currentPos.X) or (currentX > (viewportSize.X - (sideClosed and 131 or TopBar.AbsoluteSize.X)) and currentX > currentPos.X) then
-                        if currentX < 0 then
-                            currentX = 0
-                        else
-                            currentX = viewportSize.X - (sideClosed and 131 or TopBar.AbsoluteSize.X)
-                        end
-                    end
-                    if (currentY < 0 and currentY < currentPos.Y) or (currentY > (viewportSize.Y - (closed and 19 or Background.AbsoluteSize.Y) - GuiInset.Y) and currentY > currentPos.Y) then
-                        if currentY < 0 then
-                            currentY = 0
-                        else
-                            currentY = viewportSize.Y - (closed and 19 or Background.AbsoluteSize.Y) - GuiInset.Y
-                        end
-                    end
-                    currentPos = Vector2.new(currentX, currentY)
-                    lastPos = newPos
-                    TweenService.Create(TweenService, Background, TweenInfo.new(0.1), {Position = UDim2.new(0, currentPos.X, 0, currentPos.Y)}):Play()
+    spawn(function() -- Run this in a separate thread
+        pcall(function() -- Safeguard the entire function to prevent runtime errors
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                local lastPos = UserInputService:GetMouseLocation()
+                local mainPos = Background.AbsolutePosition
+                local offset = mainPos - lastPos
+                local currentPos = offset + lastPos
+
+                if not connections["drag"] then
+                    connections["drag"] = RunService.RenderStepped:Connect(function()
+                        pcall(function() -- Additional safety for each frame
+                            local newPos = UserInputService:GetMouseLocation()
+                            if newPos ~= lastPos then
+                                local delta = newPos - lastPos
+                                local currentX = Background.Position.X.Offset + delta.X
+                                local currentY = Background.Position.Y.Offset + delta.Y
+                                local viewportSize = workspace.CurrentCamera.ViewportSize
+
+                                -- Clamp the position to stay within screen bounds
+                                currentX = math.clamp(currentX, 0, viewportSize.X - Background.Size.X.Offset)
+                                currentY = math.clamp(currentY, 0, viewportSize.Y - Background.Size.Y.Offset)
+
+                                Background.Position = UDim2.new(0, currentX, 0, currentY)
+                                lastPos = newPos
+                            end
+                        end)
+                    end)
                 end
-                    -- if input.UserInputState ~= Enum.UserInputState.Begin then
-                    --     RunService.UnbindFromRenderStep(RunService, "drag")
-                    -- end
-            end)
-        end
-        table.insert(connections, UserInputService.InputEnded:Connect(function(inputE)
-            if input == inputE then
-                if connections["drag"] then
-                    connections["drag"]:Disconnect()
-                    connections["drag"] = nil
-                end
+
+                -- End drag on input end
+                table.insert(connections, UserInputService.InputEnded:Connect(function(inputE)
+                    if input == inputE then
+                        pcall(function()
+                            if connections["drag"] then
+                                connections["drag"]:Disconnect()
+                                connections["drag"] = nil
+                            end
+                        end)
+                    end
+                end))
             end
-        end))
-    end
+        end)
+    end)
 end
 
 --- Fades out the table of elements (and makes them invisible), returns a function to make them visible again
